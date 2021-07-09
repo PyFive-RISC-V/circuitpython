@@ -15,3 +15,5 @@ void     flash_write_enable(void);
 void     flash_sector_erase(uint32_t addr);
 void     flash_page_write(uint32_t addr, uint32_t *buf);
 
+void     flash_do_sector_erase(uint32_t addr);
+void     flash_do_page_write(uint32_t addr, uint32_t *buf);

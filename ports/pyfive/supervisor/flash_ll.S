@@ -37,9 +37,6 @@ _flash_done:
 	li	t0, 0x00000004
 	sw	t0, SPI_CSR(a4)
 
-	// Re-enable interrupts
-	csrs	mstatus, MSTATUS_MIE
-
 	// Done
 	ret
 
@@ -50,9 +47,6 @@ _flash_done:
 
 	.global flash_read_sr1
 flash_read_sr1:
-
-	// Disable interrupts
-        csrc	mstatus, MSTATUS_MIE
 
 	// Get manual control of the SPI controller
 	li	a4, QSPI_BASE
@@ -80,9 +74,6 @@ flash_read_sr1:
 
 	.global flash_unique_id
 flash_unique_id:
-
-	// Disable interrupts
-        csrc	mstatus, MSTATUS_MIE
 
 	// Load QSPI_BASE
 	li	a4, QSPI_BASE
@@ -147,9 +138,6 @@ flash_unique_id:
 	li	t0, 0x00000004
 	sw	t0, SPI_CSR(a4)
 
-	// Re-enable interrupts
-	csrs	mstatus, MSTATUS_MIE
-
 	// Done
 	ret
 
@@ -160,9 +148,6 @@ flash_unique_id:
 
 	.global flash_write_enable
 flash_write_enable:
-
-	// Disable interrupts
-        csrc	mstatus, MSTATUS_MIE
 
 	// Get manual control of the SPI controller
 	li	a4, QSPI_BASE
@@ -184,9 +169,6 @@ flash_write_enable:
 
 	.global flash_sector_erase
 flash_sector_erase:
-
-	// Disable interrupts
-        csrc	mstatus, MSTATUS_MIE
 
 	// Get manual control of the SPI controller
 	li	a4, QSPI_BASE
@@ -222,9 +204,6 @@ flash_page_write:
 	addi	a2, a2, 8
 	bne	a2, a3, 1b
 
-	// Disable interrupts
-        csrc	mstatus, MSTATUS_MIE
-
 	// Get manual control of the SPI controller
 	li	a4, QSPI_BASE
 
@@ -249,3 +228,67 @@ flash_page_write:
 
 _buffer:
 	.space	256
+
+
+//
+// void flash_do_sector_erase(uint32_t addr)
+//
+
+	.global flash_do_sector_erase
+flash_do_sector_erase:
+
+	// Save return value
+	mv	t6, ra
+
+	// Disable interrupts
+	csrc	mstatus, MSTATUS_MIE
+
+	// Set WEL
+	call	flash_write_enable
+
+	// Do actual page_write
+	call	flash_sector_erase
+
+	// Wait for Busy Bit
+1:
+	call	flash_read_sr1
+	andi	a0, a0, 1
+	bne	a0, zero, 1b
+
+	// Restore interrupts
+	csrs	mstatus, MSTATUS_MIE
+
+	// Return
+	jr	t6
+
+
+//
+// void flash_do_page_write(uint32_t addr, uint32_t *buf)
+//
+
+	.global flash_do_page_write
+flash_do_page_write:
+
+	// Save return value
+	mv	t6, ra
+
+	// Disable interrupts
+	csrc	mstatus, MSTATUS_MIE
+
+	// Set WEL
+	call	flash_write_enable
+
+	// Do actual page_write
+	call	flash_page_write
+
+	// Wait for Busy Bit
+1:
+	call	flash_read_sr1
+	andi	a0, a0, 1
+	bne	a0, zero, 1b
+
+	// Restore interrupts
+	csrs	mstatus, MSTATUS_MIE
+
+	// Return
+	jr	t6

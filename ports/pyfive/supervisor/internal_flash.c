@@ -49,8 +49,6 @@ static bool     _flash_cache_dirty;
 static uint8_t  _flash_cache_data[FLASH_SECTOR_SIZE] __attribute__((aligned(4)));
 static uint32_t _flash_cache_addr = NO_CACHE;
 
-static uint8_t memdisk[FLASH_SIZE] __attribute__((aligned(4)));
-static bool    memdisk_init_done = false;
 
 static inline void *
 lba2mem(uint32_t block)
@@ -77,12 +75,6 @@ lba2addr(uint32_t block)
 void
 supervisor_flash_init(void)
 {
-	if (memdisk_init_done)
-		return;
-
-	memdisk_init_done = true;
-
-	memcpy(memdisk, lba2mem(0), FLASH_SIZE);
 }
 
 uint32_t
@@ -107,39 +99,22 @@ port_internal_flash_flush(void)
 	if (!_flash_cache_dirty) {
 		return;
 	}
-#if 0
-	// Erase sector
-	*((uint32_t*)0x82000000) = 'e';
-	flash_write_enable();
-	flash_sector_erase(_flash_cache_addr);
-	while (flash_read_sr1() & 1);
-	*((uint32_t*)0x82000000) = 'E';
-#endif
 
-#if 0
+	// Erase sector
+	flash_do_sector_erase(_flash_cache_addr);
+
 	// Write all the pages
 	for (uint32_t ofs=0; ofs<FLASH_SECTOR_SIZE; ofs+=FLASH_PAGE_SIZE)
 	{
-		flash_write_enable();
-		flash_page_write(_flash_cache_addr+ofs, (void*)&_flash_cache_data[ofs]);
-		while (flash_read_sr1() & 1);
+		flash_do_page_write(_flash_cache_addr+ofs, (void*)&_flash_cache_data[ofs]);
 	}
-#endif
 
 	// Hack for cache
-#if 0
 	memcpy(
-		(void*)(0x40000000 + _flash_cache_addr),
+		addr2mem(_flash_cache_addr),
 		_flash_cache_data,
 		FLASH_SECTOR_SIZE
 	);
-#else
-	memcpy(
-		&memdisk[_flash_cache_addr - FLASH_PARTITION_OFFSET_BYTES],
-		_flash_cache_data,
-		FLASH_SECTOR_SIZE
-	);
-#endif
 
 	// All clean
 	_flash_cache_dirty = false;
@@ -152,19 +127,11 @@ supervisor_flash_read_blocks(uint8_t *dest, uint32_t lba, uint32_t num_blocks)
 	supervisor_flash_flush();
 
 	// Just read as memory mapped
-#if 0
 	memcpy(
 		dest,
 		lba2mem(lba),
 		FILESYSTEM_BLOCK_SIZE * num_blocks
 	);
-#else
-	memcpy(
-		dest,
-		&memdisk[lba * FILESYSTEM_BLOCK_SIZE],
-		FILESYSTEM_BLOCK_SIZE * num_blocks
-	);
-#endif
 
 	return 0;
 }
@@ -186,11 +153,7 @@ supervisor_flash_write_blocks(const uint8_t *src, uint32_t lba, uint32_t num_blo
 			_flash_cache_dirty = false;
 
 			// Copy the current contents of the entire page into the cache.
-#if 0
 			memcpy(_flash_cache_data, addr2mem(sector_addr), FLASH_SECTOR_SIZE);
-#else
-			memcpy(_flash_cache_data, &memdisk[_flash_cache_addr - FLASH_PARTITION_OFFSET_BYTES], FLASH_SECTOR_SIZE);
-#endif
 		}
 
 		// Overwrite part or all of the page cache with the src data, but only if it's changed.
